@@ -1,4 +1,4 @@
-const MAX_DATE = 25;
+const MAX_DATE = 12;
 const BASE_FOLDER = 'src';
 const DAY_FOLDER_NAME = 'day {{day}}';
 const INPUT_FOLDER_NAME = 'input';
