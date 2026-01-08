@@ -42,34 +42,61 @@ const part2 = () => {
     validByY.get(y).push(x);
   }
 
-  let sortedPointsY = input.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-  // Add points in X between points with same Y
-  for (let i = 0; i < sortedPointsY.length - 1; i++) {
-    addValidPoint(sortedPointsY[i][0], sortedPointsY[i][1]);
-    for (let j = i + 1; j < sortedPointsY.length; j++) {
-      if (sortedPointsY[i][1] !== sortedPointsY[j][1]) {
-        break;
-      }
-      for (let x = sortedPointsY[i][0] + 1; x < sortedPointsY[j][0]; x++) {
-        addValidPoint(x, sortedPointsY[i][1]);
+  // Build polygon from consecutive input points + store edges
+  const verticalEdges = []; // { x, minY, maxY }
+  const horizontalEdges = []; // { y, minX, maxX }
+
+  for (let i = 0; i < input.length; i++) {
+    const curr = input[i];
+    const next = input[(i + 1) % input.length];
+
+    addValidPoint(curr[0], curr[1]);
+
+    // If consecutive points share X (vertical edge)
+    if (curr[0] === next[0]) {
+      const minY = Math.min(curr[1], next[1]);
+      const maxY = Math.max(curr[1], next[1]);
+      verticalEdges.push({ x: curr[0], minY, maxY });
+      for (let y = minY + 1; y < maxY; y++) {
+        addValidPoint(curr[0], y);
       }
     }
-  }
-  // Add points in Y between points with same X
-  let sortedPointsX = input.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  for (let i = 0; i < sortedPointsX.length - 1; i++) {
-    addValidPoint(sortedPointsX[i][0], sortedPointsX[i][1]);
-    for (let j = i + 1; j < sortedPointsX.length; j++) {
-      if (sortedPointsX[i][0] !== sortedPointsX[j][0]) {
-        break;
-      }
-      for (let y = sortedPointsX[i][1] + 1; y < sortedPointsX[j][1]; y++) {
-        addValidPoint(sortedPointsX[i][0], y);
+    // If consecutive points share Y (horizontal edge)
+    else if (curr[1] === next[1]) {
+      const minX = Math.min(curr[0], next[0]);
+      const maxX = Math.max(curr[0], next[0]);
+      horizontalEdges.push({ y: curr[1], minX, maxX });
+      for (let x = minX + 1; x < maxX; x++) {
+        addValidPoint(x, curr[1]);
       }
     }
   }
 
-  // console.log(sortedPointsY);
+  // Check if any polygon edge cuts through rectangle interior
+  function edgeCutsRectangle(minX, maxX, minY, maxY) {
+    // Check vertical edges: if edge.x is strictly inside (minX, maxX),
+    // and edge overlaps with (minY, maxY), it cuts through
+    for (const edge of verticalEdges) {
+      if (edge.x > minX && edge.x < maxX) {
+        // Edge is inside x-range, check y overlap
+        if (edge.minY < maxY && edge.maxY > minY) {
+          return true;
+        }
+      }
+    }
+    // Check horizontal edges: if edge.y is strictly inside (minY, maxY),
+    // and edge overlaps with (minX, maxX), it cuts through
+    for (const edge of horizontalEdges) {
+      if (edge.y > minY && edge.y < maxY) {
+        // Edge is inside y-range, check x overlap
+        if (edge.minX < maxX && edge.maxX > minX) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // console.log(validByX, validByY);
 
   function area([x1, y1], [x2, y2]) {
@@ -87,27 +114,68 @@ const part2 = () => {
         let isP4Valid = false;
         // check if all four points are in validPoints
         // p1 and p3 are always valid
-        // to validate p2 and p4, we use ray casting: a point is inside if
-        // there's an ODD number of boundary crossings on BOTH sides
+        // to validate p2 and p4, we use ray casting in BOTH directions
 
-        // Check p2: count valid points to left AND right - both must be odd
-        if (validByY.has(p2[1])) {
-          let xsOnRow = validByY.get(p2[1]);
-          let countLeft = xsOnRow.filter((x) => x < p2[0]).length;
-          let countRight = xsOnRow.filter((x) => x > p2[0]).length;
-          isP2Valid = countLeft % 2 === 1 && countRight % 2 === 1;
+        // Check p2: if on boundary it's valid, otherwise use ray casting
+        if (addedPoints.has(`${p2[0]},${p2[1]}`)) {
+          isP2Valid = true;
+        } else {
+          // Horizontal ray: count vertical edges crossed (use <= on minY for consistent corner handling)
+          let countLeft = verticalEdges.filter(
+            (e) => e.x < p2[0] && e.minY <= p2[1] && p2[1] < e.maxY
+          ).length;
+          let countRight = verticalEdges.filter(
+            (e) => e.x > p2[0] && e.minY <= p2[1] && p2[1] < e.maxY
+          ).length;
+          // Vertical ray: count horizontal edges crossed (use <= on minX for consistent corner handling)
+          let countAbove = horizontalEdges.filter(
+            (e) => e.y < p2[1] && e.minX <= p2[0] && p2[0] < e.maxX
+          ).length;
+          let countBelow = horizontalEdges.filter(
+            (e) => e.y > p2[1] && e.minX <= p2[0] && p2[0] < e.maxX
+          ).length;
+          isP2Valid =
+            countLeft % 2 === 1 &&
+            countRight % 2 === 1 &&
+            countAbove % 2 === 1 &&
+            countBelow % 2 === 1;
         }
 
-        // Check p4: count valid points above AND below - both must be odd
-        if (validByX.has(p4[0])) {
-          let ysOnCol = validByX.get(p4[0]);
-          let countAbove = ysOnCol.filter((y) => y < p4[1]).length;
-          let countBelow = ysOnCol.filter((y) => y > p4[1]).length;
-          isP4Valid = countAbove % 2 === 1 && countBelow % 2 === 1;
+        // Check p4: if on boundary it's valid, otherwise use ray casting
+        if (addedPoints.has(`${p4[0]},${p4[1]}`)) {
+          isP4Valid = true;
+        } else {
+          // Horizontal ray: count vertical edges crossed (use <= on minY for consistent corner handling)
+          let countLeft = verticalEdges.filter(
+            (e) => e.x < p4[0] && e.minY <= p4[1] && p4[1] < e.maxY
+          ).length;
+          let countRight = verticalEdges.filter(
+            (e) => e.x > p4[0] && e.minY <= p4[1] && p4[1] < e.maxY
+          ).length;
+          // Vertical ray: count horizontal edges crossed (use <= on minX for consistent corner handling)
+          let countAbove = horizontalEdges.filter(
+            (e) => e.y < p4[1] && e.minX <= p4[0] && p4[0] < e.maxX
+          ).length;
+          let countBelow = horizontalEdges.filter(
+            (e) => e.y > p4[1] && e.minX <= p4[0] && p4[0] < e.maxX
+          ).length;
+          isP4Valid =
+            countLeft % 2 === 1 &&
+            countRight % 2 === 1 &&
+            countAbove % 2 === 1 &&
+            countBelow % 2 === 1;
         }
 
         if (isP2Valid && isP4Valid) {
-          areas.push({ i, j, d: area(input[i], input[j]) });
+          // Also check that no polygon edge cuts through the rectangle interior
+          const minX = Math.min(input[i][0], input[j][0]);
+          const maxX = Math.max(input[i][0], input[j][0]);
+          const minY = Math.min(input[i][1], input[j][1]);
+          const maxY = Math.max(input[i][1], input[j][1]);
+
+          if (!edgeCutsRectangle(minX, maxX, minY, maxY)) {
+            areas.push({ i, j, d: area(input[i], input[j]) });
+          }
         }
       }
     }
